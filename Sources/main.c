@@ -6,7 +6,7 @@
 /*   By: pausanch <pausanch@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2024/07/21 04:02:10 by briveiro          #+#    #+#             */
-/*   Updated: 2024/11/04 11:24:19 by pausanch         ###   ########.fr       */
+/*   Updated: 2024/11/06 12:27:40 by pausanch         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -32,7 +32,7 @@ void	fake_executor(t_data *data)
 	if (ft_strlen(data->input) == 0)
 		return ;
 	ft_handle_redirections_and_pipes(data);
-	if (ft_strncmp(data->token->content, "pwd", ft_strlen("pwd")) == 0)
+	/* if (ft_strncmp(data->token->content, "pwd", ft_strlen("pwd")) == 0)
 		ft_pwd();
 	else if (ft_strncmp(data->token->content, "env", ft_strlen("env")) == 0)
 		ft_env(data);
@@ -47,7 +47,7 @@ void	fake_executor(t_data *data)
 	else if (ft_strncmp(data->token->content, "exit", ft_strlen("exit")) == 0)
 		ft_exit(data);
 	else
-		ft_check_cmd_on_path(data);
+		ft_check_cmd_on_path(data); */
 }
 
 int	ft_loop(t_data *data)

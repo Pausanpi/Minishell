@@ -6,131 +6,115 @@
 /*   By: pausanch <pausanch@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2024/07/21 19:48:35 by abello-r          #+#    #+#             */
-/*   Updated: 2024/11/04 14:12:29 by pausanch         ###   ########.fr       */
+/*   Updated: 2024/11/06 14:54:39 by pausanch         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
 #include "../../Includes/minishell.h"
 
-/*int		ft_handle_redirections_and_pipes(t_data *data)
-{	
-	(void)data;
-	//printf("Redirections and pipes handled\n");
-	return (0);
-}
-if (type[0] == '|')
-		return ("PIPE");
-	else if (type[0] == '>' && type[1] == '>')
-		return ("APPEND");
-	else if (type[0] == '>')
-		return ("OUT");
-	else if (type[0] == '<' && type[1] == '<')
-		return ("HEREDOC");
-	else if (type[0] == '<')
-		return ("INPUT");
-*/
-
-/*int is_pipe(const char *token) {
-    return (ft_strncmp(token, "|", 1) == 0);
+void ft_execute_builtin(t_data *data)
+{
+	if (ft_strncmp(data->token->content, "pwd", ft_strlen("pwd")) == 0)
+		ft_pwd();
+	else if (ft_strncmp(data->token->content, "env", ft_strlen("env")) == 0)
+		ft_env(data);
+	else if (ft_strncmp(data->token->content, "unset", ft_strlen("unset")) == 0)
+		ft_unset(data);
+	else if (ft_strncmp(data->token->content, "export", ft_strlen("export")) == 0)
+		ft_export(data);
+	else if (ft_strncmp(data->token->content, "cd", ft_strlen("cd")) == 0)
+		ft_cd(data);
+	else if (ft_strncmp(data->token->content, "echo", ft_strlen("echo")) == 0)
+		ft_echo(data);
+	else if (ft_strncmp(data->token->content, "exit", ft_strlen("exit")) == 0)
+		ft_exit(data);
+	else
+		ft_check_cmd_on_path(data);
 }
 
-int ft_create_pipe(int prev_pipe) {
-    int pipe_fd[2];
+int	ft_handle_redirections_and_pipes(t_data *data)
+{
+    t_token *current_token = data->token;
+    int in_fd = STDIN_FILENO;
+    int out_fd = STDOUT_FILENO;
+    int pipe_fds[2];
+    int has_pipe = 0;
+    pid_t pid;
+    int status;
+    int exit_status = 0;
 
-    if (pipe(pipe_fd) == -1) {
-        ft_print_exit("PIPE ERROR");
+    // Paso 1: Comprobar si hay pipes o redirecciones en la lista de tokens
+    while (current_token)
+    {
+        if (strcmp(current_token->type, "PIPE") == 0)
+            has_pipe = 1;  // Indica que se encontró un pipe
+        else if (strcmp(current_token->type, "OUT") == 0 || strcmp(current_token->type, "APPEND") == 0)
+            out_fd = (strcmp(current_token->type, "OUT") == 0) ?
+                     open(current_token->next->content, O_WRONLY | O_CREAT | O_TRUNC, 0644) :
+                     open(current_token->next->content, O_WRONLY | O_CREAT | O_APPEND, 0644);
+        else if (strcmp(current_token->type, "INPUT") == 0)
+            in_fd = open(current_token->next->content, O_RDONLY);
+        
+        // Si hubo algún error al abrir archivos, devolver error inmediato
+        if (out_fd < 0 || in_fd < 0)
+            return -1;
+        
+        current_token = current_token->next;
     }
 
-    if (prev_pipe != -1) {
-        close(prev_pipe);
-    }
+	if (is_builtin(data->token->content) && strcmp(data->token->content, "exit") == 0)
+        return (ft_exit(data), 0);
 
-    return pipe_fd[0];  // Retorna el descriptor de lectura
-}
+    // Paso 2: Configurar pipe si es necesario
+    if (has_pipe && pipe(pipe_fds) < 0)
+        return -1;  // Error al crear el pipe
 
-int is_redirection(t_token *token) {
-    return (ft_strncmp(token->content, "<", 1) == 0 ||
-            ft_strncmp(token->content, ">", 1) == 0 ||
-            ft_strncmp(token->content, ">>", 2) == 0);
-}
-
-void ft_setup_redirection(t_token *cmd) {
-    int fd = -1;
-
-    if (cmd->next == NULL) {
-        fprintf(stderr, "Error: No file specified for redirection.\n");
-        return;
-    }
-
-    if (ft_strncmp(cmd->content, "<", 1) == 0) {
-        fd = open(cmd->next->content, O_RDONLY);
-        if (fd == -1) {
-            perror("Error opening file for reading");
-            exit(EXIT_FAILURE);
+    // Paso 3: Ejecutar el comando, manejando pipes y redirecciones
+    if ((pid = fork()) == 0)
+    {
+        // Proceso hijo: Configurar redirección y ejecución de comando
+        if (in_fd != STDIN_FILENO)
+        {
+            dup2(in_fd, STDIN_FILENO);
+            close(in_fd);
         }
-        dup2(fd, STDIN_FILENO);
-    } else if (ft_strncmp(cmd->content, ">", 1) == 0) {
-        fd = open(cmd->next->content, O_WRONLY | O_CREAT | O_TRUNC, 0644);
-        if (fd == -1) {
-            perror("Error opening file for writing");
-            exit(EXIT_FAILURE);
+        if (has_pipe)
+        {
+            dup2(pipe_fds[1], STDOUT_FILENO); // Redirige la salida al pipe
+            close(pipe_fds[0]);               // Cierra el extremo de lectura
         }
-        dup2(fd, STDOUT_FILENO);
-    } else if (ft_strncmp(cmd->content, ">>", 2) == 0) {
-        fd = open(cmd->next->content, O_WRONLY | O_CREAT | O_APPEND, 0644);
-        if (fd == -1) {
-            perror("Error opening file for appending");
-            exit(EXIT_FAILURE);
+        else if (out_fd != STDOUT_FILENO)
+        {
+            dup2(out_fd, STDOUT_FILENO); // Redirige salida al archivo
+            close(out_fd);
         }
-        dup2(fd, STDOUT_FILENO);
+        // Verificar si el comando es builtin y ejecutarlo, si no, llamar execve
+        if (is_builtin(data->token->content))
+        	ft_execute_builtin(data);
+        else
+            ft_check_cmd_on_path(data);
+        exit(EXIT_FAILURE); // En caso de fallo en execve o comando
     }
+    else if (pid > 0)
+    {
+        // Proceso padre: Esperar el proceso hijo y manejar el extremo del pipe
+        waitpid(pid, &status, 0);
+        if (WIFEXITED(status))
+            exit_status = WEXITSTATUS(status);
+        if (has_pipe)
+        {
+            close(pipe_fds[1]);       // Cerrar el extremo de escritura
+            in_fd = pipe_fds[0];      // El siguiente comando leerá del extremo de lectura del pipe
+        }
+    }
+    else
+        return -1; // Error en fork
 
-    if (fd != -1) {
-        close(fd);
-    }
+    // Cerrar descriptores si fueron modificados
+    if (in_fd != STDIN_FILENO)
+        close(in_fd);
+    if (out_fd != STDOUT_FILENO)
+        close(out_fd);
+
+    return (exit_status); // Devolver el estado de salida del último comando ejecutado
 }
-
-void ft_execute_with_redirection(t_data *data, t_token *cmd, int *prev_pipe) {
-    int pipe_fd[2];
-    int saved_stdout = dup(STDOUT_FILENO);
-
-    if (is_redirection(cmd)) {
-        ft_setup_redirection(cmd);
-    }
-
-    if (*prev_pipe != -1) {
-        dup2(*prev_pipe, STDIN_FILENO);
-        close(*prev_pipe);
-    }
-
-    if (cmd->next && is_pipe(cmd->next->content)) {
-        pipe(pipe_fd);
-        dup2(pipe_fd[1], STDOUT_FILENO);
-        close(pipe_fd[1]);
-    }
-
-    if (ft_execute_cmd(data, cmd->content) == -1) {
-        fprintf(stderr, "Error executing command: %s\n", cmd->content);
-    }
-
-    dup2(saved_stdout, STDOUT_FILENO);
-    close(saved_stdout);
-    *prev_pipe = pipe_fd[0];
-}
-
-int ft_handle_redirections_and_pipes(t_data *data) {
-    t_token *current_cmd;
-    int prev_pipe;
-
-    current_cmd = data->token;
-    prev_pipe = -1;
-    while (current_cmd) {
-        if (is_pipe(current_cmd->content)) {
-            prev_pipe = ft_create_pipe(prev_pipe);
-        } else {
-            ft_execute_with_redirection(data, current_cmd, &prev_pipe);
-        }
-        current_cmd = current_cmd->next;
-    }
-    return 0;
-}*/
