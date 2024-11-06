@@ -6,7 +6,7 @@
 /*   By: pausanch <pausanch@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2024/07/19 14:46:25 by abello-r          #+#    #+#             */
-/*   Updated: 2024/11/06 17:28:07 by pausanch         ###   ########.fr       */
+/*   Updated: 2024/11/06 17:40:11 by pausanch         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -52,6 +52,7 @@ int	ft_execute_cmd(t_data *data, char *command)
 	
 	argv = ft_build_argv(data->token);
 	pid = fork();
+
 
 	if (pid == 0)
 	{
